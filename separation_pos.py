@@ -17,8 +17,8 @@ t_max=490
 boxes=[17,18]
 x_duesenende=1.36666667461395264
 
-ONPR_low          = 3
-ONPR_high         = 10
+NPR_low          = 3
+NPR_high         = 10
 delta_t          = 59.551900251890460
 delta_hold       = 2.247241518939263
 
@@ -118,7 +118,27 @@ def progressBar(current, total, barLength = 20):
 
     print('Progress: [%s%s] %d %%' % (arrow, spaces, percent), end='\r')
     
-#def getNPR(time,NPR_)
+def getNPR(time,delta_hold,delta_t,NPR_low,NPR_high):
+    
+    T_up_start = delta_hold;
+    T_up_end   = delta_hold + delta_t;
+    T_konst_end= 2* delta_hold + delta_t;
+    T_down_end = 2* delta_hold + 2* delta_t;
+     
+#    %% Druckrampe
+#    
+    if time <= T_up_start:
+        NPR = NPR_low;
+    elif (T_up_start <= time) and (T_up_end > time):
+        NPR = (NPR_low + (NPR_high - NPR_low) /(T_up_end-T_up_start)*(time-T_up_start));
+    elif (T_up_end<=time) and (T_konst_end>time):
+        NPR = NPR_high;
+    elif (T_konst_end<=time) and (T_down_end>time):
+        NPR =(NPR_high+(NPR_low-NPR_high)/(T_down_end-T_konst_end)*(time-T_konst_end));
+    elif time>=T_down_end:
+        NPR =NPR_low;
+    
+    return NPR
 
 'Reading X-file'
 
@@ -127,10 +147,12 @@ x=readgrid(X_FILE,boxes)
 'Reading grid'
 
 x_abl=np.zeros(t_max-t_start+1)
+NPR=np.zeros(t_max-t_start+1)
 for t in range(t_start,t_max+1):
     Q_tmp=Q_FILE+str(t)
     if os.path.exists(Q_tmp):
         [q,time]=readqdata(Q_tmp,boxes,qvars=[2])
+        NPR[t-t_start]=getNPR(time,delta_hold,delta_t,NPR_low,NPR_high)
         progressBar(t,t_max+1)
         
         'Ende der Düse'
@@ -145,6 +167,7 @@ for t in range(t_start,t_max+1):
                 
     else:
         x_abl[t-t_start]=x_abl[t-t_start-1]
+        NPR[t-t_start]=NPR[t-t_start-1]
         print('File of timestep %i does not exist' % t)
         non_exist_file += 1
                 
