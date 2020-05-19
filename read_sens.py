@@ -7,10 +7,8 @@ Created on Thu May 14 14:54:12 2020
 """
 import numpy as np
 import os
-import scipy
-import math
 
-DAT_DIR="../LES_outer_sword_NPR3/sensors_dat/"
+DAT_DIR="../LES_outer_sword/sensors_dat/"
 
 
 def loaddat(DAT_DIR):
@@ -18,7 +16,7 @@ def loaddat(DAT_DIR):
     for root, dirs, files in os.walk(DAT_DIR):
         f.append(files)
     
-    files=files[1:3]
+#    files=files[1:3]
     
     sensor_data=[0]*len(files)
     
@@ -44,21 +42,21 @@ nan_elements=np.isnan(time)
 istart=[0]*len(data)
 iend=[0]*len(data)
 t_break=0
-indicator=True
 
 for d in range(len(data)):
     number_samples=data[d].shape[0]
     time=data[d][:,0]
     istart[d]=[]
-    iend[d]=[0]
+    iend[d]=[-1]
+    indicator=True
     for i in range(1,number_samples):
-        if time[i-1] > time[i] and indicator:
-            t_break=time[i-1]
-            istart[d].append(i-1)
+        if (time[-i-1] > time[-i] or time[-i]-time[-i-1]>0.2) and indicator:
+            t_break=time[-i]
+            istart[d].append(-i+number_samples)
             indicator=False
     
-        elif time[i-1] < t_break < time[i+1] and indicator == False:
-            iend[d].append(i-1)
+        elif time[-i-1] < t_break < time[-i+1] and indicator == False:
+            iend[d].append(-i+number_samples)
             indicator=True
         
 'Zuschneiden Signal'
@@ -67,15 +65,16 @@ new_data=[0]*len(data)
 for d in range(len(data)):
     new_data[d]=np.zeros((1,6),dtype=np.float)
     for i in range(len(istart[d])):
-        new_data[d]=np.append(new_data[d],data[d][iend[d][i]:istart[d][i],:],axis=0)
+        new_data[d]=np.append(new_data[d],data[d][istart[d][-i-1]:iend[d][-i-1],:],axis=0)
 
+for d in range(len(data)):
+    new_data[d]=new_data[d][18:-1,:]
+'Schreiben der neuen Files'
 
-'Schreiben des neuen Files'
-
-#for d in range(len(data)):
-#    
-#    filename='../LES_outer_sword/sens_cut/'+str(files[d])
-#    np.savetxt(filename, new_data[d])
+for d in range(len(data)):
+    
+    filename='../LES_outer_sword/sens_cut/'+str(files[d])
+    np.savetxt(filename, new_data[d])
         
         
         
