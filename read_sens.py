@@ -50,14 +50,16 @@ for d in range(len(data)):
     iend[d]=[-1]
     indicator=True
     for i in range(1,number_samples):
-        if (time[-i-1] > time[-i] or time[-i]-time[-i-1]>0.2) and indicator:
-            t_break=time[-i]
+        if (time[-i-1] > time[-i] or (time[-i]-time[-i-1])>0.2) and indicator:
+            t_break=time[-i+number_samples]
             istart[d].append(-i+number_samples)
             indicator=False
     
-        elif time[-i-1] < t_break < time[-i+1] and indicator == False:
-            iend[d].append(-i+number_samples)
+        elif time[-i-1] < t_break < time[-i+1] and np.abs(time[-i-1]-time[-i+1])<0.2 and indicator == False:
+            iend[d].append(-i+number_samples-1)
             indicator=True
+    if len(istart[d])<len(iend[d]):
+        istart[d].append(0)
         
 'Zuschneiden Signal'
 new_data=[0]*len(data)
@@ -68,14 +70,14 @@ for d in range(len(data)):
         new_data[d]=np.append(new_data[d],data[d][istart[d][-i-1]:iend[d][-i-1],:],axis=0)
 
 for d in range(len(data)):
-    new_data[d]=new_data[d][18:-1,:]
+    new_data[d] = np.delete(new_data[d], 0, axis=0)
 'Schreiben der neuen Files'
 
 for d in range(len(data)):
     
     filename='../LES_outer_sword/sens_cut/'+str(files[d])
     np.savetxt(filename, new_data[d])
-        
+#        
         
         
         
