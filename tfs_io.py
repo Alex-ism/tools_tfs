@@ -9,6 +9,7 @@ Created on Fri May 22 14:08:44 2020
 import numpy as np
 import h5py
 import os
+import math
 
 def loaddat(DAT_DIR,file_spec=None):
     f=[]
@@ -101,7 +102,7 @@ def readqdata(Q_FILE,boxes=None,qvars=None):
 
     return q_data,time
 
-def getPosition(x,xq,yq,zq):
+def getPosition(x,xq,yq,zq,blocks_only=True):
     ijk_q=[0]*3
     blocks=len(x)
     maxCoord=np.zeros((3,blocks));
@@ -121,25 +122,24 @@ def getPosition(x,xq,yq,zq):
         and (yq >= minCoord[1,block]) and (yq <= maxCoord[1,block]) \
         and (zq >= minCoord[2,block]) and (zq <= maxCoord[2,block]):
             blockq=block
-    iiter=x[0].shape[3]
-    jiter=x[0].shape[2]
-    kiter=x[0].shape[1]
-    
-    dist_test=1
-    for i in range(iiter):
-        for j in range(jiter):
-            for k in range(kiter):
-                dist=np.abs((x[blockq][0,k,j,i]-xq))+np.abs((x[blockq][1,k,j,i]-yq)) \
-                +np.abs((x[blockq][2,k,j,i]-zq))
-                if dist<dist_test:
-                    dist_test=dist
-                    ijk_q[0]=k  
-                    ijk_q[1]=j  
-                    ijk_q[2]=i  
-    
+    iiter=x[blockq].shape[3]
+    jiter=x[blockq].shape[2]
+    kiter=x[blockq].shape[1]
+    if not blocks_only:
+        dist_test=1
+        for i in range(iiter):
+            for j in range(jiter):
+                for k in range(kiter):
+                    dist=np.abs((x[blockq][0,k,j,i]-xq))+np.abs((x[blockq][1,k,j,i]-yq)) \
+                    +np.abs((x[blockq][2,k,j,i]-zq))
+                    if dist<dist_test:
+                        dist_test=dist
+                        ijk_q[0]=k  
+                        ijk_q[1]=j  
+                        ijk_q[2]=i  
     return  ijk_q, blockq
 
-def writeqdata(OUT_File,q_data,boxes=None,qvars=None,time=None):
+def writeqdata(OUT_File,q_data,boxes=None,qvars=None,time=1):
     f = h5py.File(OUT_File,'w-')
     f.attrs.create('time',time)
     grp = f.create_group("/Q/")
@@ -170,3 +170,133 @@ def writeqdata(OUT_File,q_data,boxes=None,qvars=None,time=None):
             q_dspace=box.create_dataset(q_names[q-1],q_shape,dtype='float64')
             q_dspace.write_direct(q_data[i-1][q-1])
     return None
+
+def getBlocks_phidir(x,xD,rD):
+    phi_start=0
+    block_list=[]
+    phi_iter=phi_start
+    while phi_iter<(phi_start+2*math.pi):
+        y_D=rD*math.cos(phi_iter)
+        z_D=rD*math.sin(phi_iter)
+        
+        [ijk,block]=getPosition(x,xD,y_D,z_D)
+        
+        block_list.append(block)
+        
+        phi_block=np.arctan2(x[block][2,:],x[block][1,:])
+        max_phi=np.amax(phi_block)
+        
+        phi_iter=max_phi+1/180*math.pi
+        
+    return block_list
+
+def repartition(REPA,X_FILE=None,Q_FILE=None,blocks=None):
+    line_count=0
+    line_comm=[]
+    
+    for line in open(REPA):
+        if line.startswith('#'):
+            line_comm.append(line_count)
+        line_count+=1
+    
+    
+    block_dims=np.genfromtxt(REPA,skip_header=line_comm[7]+1,max_rows=line_comm[8]-line_comm[7]-1, dtype=int)
+    block_dims=np.flip(block_dims,axis=1)
+    rules=np.genfromtxt(REPA,skip_header=line_comm[10]+1, dtype=int)
+    if blocks==None:
+        blocks=list(range(1,block_dims.shape[0]+1))
+        
+    if X_FILE!=None:
+        x=readgrid(X_FILE)
+    if Q_FILE!=None:
+        q,time=readqdata(Q_FILE)
+    
+    q_block=[0]*len(blocks)
+    x_block=[0]*len(blocks)
+    
+    
+    for b in range(len(blocks)):
+        if Q_FILE!=None:
+            block_shape=[6]+list(block_dims[blocks[b]-1,:])
+            q_block[b-1]=np.zeros(block_shape,dtype=float)
+        if X_FILE!=None:
+            block_shape=[3]+list(block_dims[blocks[b]-1,:])
+            x_block[b-1]=np.zeros(block_shape,dtype=float)
+        for r in range(rules.shape[0]):
+            if rules[r,1]==blocks[b]:
+                i_min_in=rules[r,2]-1
+                i_max_in=rules[r,5]-1
+                j_min_in=rules[r,3]-1
+                j_max_in=rules[r,6]-1
+                k_min_in=rules[r,4]-1
+                k_max_in=rules[r,7]-1
+                i_min_out=rules[r,11]-1
+                i_max_out=i_min_out+(i_max_in-i_min_in)
+                j_min_out=rules[r,12]-1
+                j_max_out=j_min_out+(j_max_in-j_min_in)
+                k_min_out=rules[r,13]-1
+                k_max_out=k_min_out+(k_max_in-k_min_in)
+                block_part=rules[r,0]
+                if X_FILE!=None:
+                    x_block[b-1][:,k_min_out:k_max_out,j_min_out:j_max_out,i_min_out:i_max_out]=\
+                    x[block_part-1][:,k_min_in:k_max_in,j_min_in:j_max_in,i_min_in:i_max_in]
+                if Q_FILE!=None:
+                    q_block[b-1][:,k_min_out:k_max_out,j_min_out:j_max_out,i_min_out:i_max_out]=\
+                    q[block_part-1][:,k_min_in:k_max_in,j_min_in:j_max_in,i_min_in:i_max_in]
+    return q_block,x_block
+
+def repartition(REPA,X_FILE=None,Q_FILE=None,blocks=None):
+    line_count=0
+    line_comm=[]
+    
+    for line in open(REPA):
+        if line.startswith('#'):
+            line_comm.append(line_count)
+        line_count+=1
+    
+    
+    block_dims=np.genfromtxt(REPA,skip_header=line_comm[7]+1,max_rows=line_comm[8]-line_comm[7]-1, dtype=int)
+    block_dims=np.flip(block_dims,axis=1)
+    rules=np.genfromtxt(REPA,skip_header=line_comm[10]+1, dtype=int)
+    if blocks==None:
+        blocks=list(range(1,block_dims.shape[0]+1))
+        
+    if X_FILE!=None:
+        x=readgrid(X_FILE)
+    if Q_FILE!=None:
+        q,time=readqdata(Q_FILE)
+    
+    q_block=[0]*len(blocks)
+    x_block=[0]*len(blocks)
+    
+    
+    for b in range(len(blocks)):
+        if Q_FILE!=None:
+            block_shape=[6]+list(block_dims[blocks[b]-1,:])
+            q_block[b]=np.zeros(block_shape,dtype=float)
+        if X_FILE!=None:
+            block_shape=[3]+list(block_dims[blocks[b]-1,:])
+            x_block[b]=np.zeros(block_shape,dtype=float)
+        for r in range(rules.shape[0]):
+            if rules[r,1]==blocks[b]:
+                i_min_in=rules[r,2]-1
+                i_max_in=rules[r,5]
+                j_min_in=rules[r,3]-1
+                j_max_in=rules[r,6]
+                k_min_in=rules[r,4]-1
+                k_max_in=rules[r,7]
+                i_min_out=rules[r,11]-1
+                i_max_out=i_min_out+(i_max_in-i_min_in)
+                j_min_out=rules[r,12]-1
+                j_max_out=j_min_out+(j_max_in-j_min_in)
+                k_min_out=rules[r,13]-1
+                k_max_out=k_min_out+(k_max_in-k_min_in)
+                block_part=rules[r,0]
+                q_shape=q[block_part-1].shape
+                if X_FILE!=None:
+                    x_block[b][:,k_min_out:k_max_out,j_min_out:j_max_out,i_min_out:i_max_out]=\
+                    x[block_part-1][:,k_min_in:k_max_in,j_min_in:j_max_in,i_min_in:i_max_in]
+                if Q_FILE!=None:
+                    q_block[b][:,k_min_out:k_max_out,j_min_out:j_max_out,i_min_out:i_max_out]=\
+                    q[block_part-1][:,k_min_in:k_max_in,j_min_in:j_max_in,i_min_in:i_max_in]
+    return q_block,x_block
