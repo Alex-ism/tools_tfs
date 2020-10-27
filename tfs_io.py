@@ -69,7 +69,10 @@ def readgrid(X_FILE,boxes=None):
 
 def readqdata(Q_FILE,boxes=None,qvars=None):
     f = h5py.File(Q_FILE,'r')
-    time=f.attrs.__getitem__('time')
+    if 'time' in f.attrs:
+        time=f.attrs.__getitem__('time')
+    else:
+        time=0
     grp = f['/Q/']
     
     box_names = list(grp.keys())
@@ -190,60 +193,6 @@ def getBlocks_phidir(x,xD,rD):
         
     return block_list
 
-def repartition(REPA,X_FILE=None,Q_FILE=None,blocks=None):
-    line_count=0
-    line_comm=[]
-    
-    for line in open(REPA):
-        if line.startswith('#'):
-            line_comm.append(line_count)
-        line_count+=1
-    
-    
-    block_dims=np.genfromtxt(REPA,skip_header=line_comm[7]+1,max_rows=line_comm[8]-line_comm[7]-1, dtype=int)
-    block_dims=np.flip(block_dims,axis=1)
-    rules=np.genfromtxt(REPA,skip_header=line_comm[10]+1, dtype=int)
-    if blocks==None:
-        blocks=list(range(1,block_dims.shape[0]+1))
-        
-    if X_FILE!=None:
-        x=readgrid(X_FILE)
-    if Q_FILE!=None:
-        q,time=readqdata(Q_FILE)
-    
-    q_block=[0]*len(blocks)
-    x_block=[0]*len(blocks)
-    
-    
-    for b in range(len(blocks)):
-        if Q_FILE!=None:
-            block_shape=[6]+list(block_dims[blocks[b]-1,:])
-            q_block[b-1]=np.zeros(block_shape,dtype=float)
-        if X_FILE!=None:
-            block_shape=[3]+list(block_dims[blocks[b]-1,:])
-            x_block[b-1]=np.zeros(block_shape,dtype=float)
-        for r in range(rules.shape[0]):
-            if rules[r,1]==blocks[b]:
-                i_min_in=rules[r,2]-1
-                i_max_in=rules[r,5]-1
-                j_min_in=rules[r,3]-1
-                j_max_in=rules[r,6]-1
-                k_min_in=rules[r,4]-1
-                k_max_in=rules[r,7]-1
-                i_min_out=rules[r,11]-1
-                i_max_out=i_min_out+(i_max_in-i_min_in)
-                j_min_out=rules[r,12]-1
-                j_max_out=j_min_out+(j_max_in-j_min_in)
-                k_min_out=rules[r,13]-1
-                k_max_out=k_min_out+(k_max_in-k_min_in)
-                block_part=rules[r,0]
-                if X_FILE!=None:
-                    x_block[b-1][:,k_min_out:k_max_out,j_min_out:j_max_out,i_min_out:i_max_out]=\
-                    x[block_part-1][:,k_min_in:k_max_in,j_min_in:j_max_in,i_min_in:i_max_in]
-                if Q_FILE!=None:
-                    q_block[b-1][:,k_min_out:k_max_out,j_min_out:j_max_out,i_min_out:i_max_out]=\
-                    q[block_part-1][:,k_min_in:k_max_in,j_min_in:j_max_in,i_min_in:i_max_in]
-    return q_block,x_block
 
 def repartition(REPA,X_FILE=None,Q_FILE=None,blocks=None):
     line_count=0
@@ -292,7 +241,6 @@ def repartition(REPA,X_FILE=None,Q_FILE=None,blocks=None):
                 k_min_out=rules[r,13]-1
                 k_max_out=k_min_out+(k_max_in-k_min_in)
                 block_part=rules[r,0]
-                q_shape=q[block_part-1].shape
                 if X_FILE!=None:
                     x_block[b][:,k_min_out:k_max_out,j_min_out:j_max_out,i_min_out:i_max_out]=\
                     x[block_part-1][:,k_min_in:k_max_in,j_min_in:j_max_in,i_min_in:i_max_in]
