@@ -8,7 +8,7 @@ Created on Thu May 14 14:54:12 2020
 import numpy as np
 import os
 
-DAT_DIR="../LES_outer_sword/sensors_dat/"
+DAT_DIR="../LES_outer_sword_NPR3/sensors_dat/"
 
 
 def loaddat(DAT_DIR):
@@ -16,7 +16,7 @@ def loaddat(DAT_DIR):
     for root, dirs, files in os.walk(DAT_DIR):
         f.append(files)
     
-#    files=files[1:3]
+    files=files[1:3]
     
     sensor_data=[0]*len(files)
     
@@ -73,10 +73,10 @@ for d in range(len(data)):
     new_data[d] = np.delete(new_data[d], 0, axis=0)
 'Schreiben der neuen Files'
 
-for d in range(len(data)):
+#for d in range(len(data)):
     
-    filename='../LES_outer_sword/sens_cut/'+str(files[d])
-    np.savetxt(filename, new_data[d])
+#    filename='../LES_outer_sword/sens_cut/'+str(files[d])
+#    np.savetxt(filename, new_data[d])
 #        
         
         

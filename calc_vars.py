@@ -36,22 +36,22 @@ def getArea(slice_ijk):
         for j in range(dir2_max):
             ijk_pos=slice_ijk[:,i,j]
             if i!=dir1_max-1:
-                vec1=ijk_pos+0.5*(slice_ijk[:,i+1,j]-ijk_pos)
+                vec1=0.5*(slice_ijk[:,i+1,j]-ijk_pos)
             else:
                 vec1=np.zeros(3)
                 
             if i!=0:
-                vec2=ijk_pos+0.5*(slice_ijk[:,i-1,j]-ijk_pos)
+                vec2=0.5*(slice_ijk[:,i-1,j]-ijk_pos)
             else:
                 vec2=np.zeros(3)
                 
             if j!=dir2_max-1:
-                vec3=ijk_pos+0.5*(slice_ijk[:,i,j+1]-ijk_pos)
+                vec3=0.5*(slice_ijk[:,i,j+1]-ijk_pos)
             else:
                 vec3=np.zeros(3)
                 
             if j!=0:
-                vec4=ijk_pos+0.5*(slice_ijk[:,i,j-1]-ijk_pos)
+                vec4=0.5*(slice_ijk[:,i,j-1]-ijk_pos)
             else:
                 vec4=np.zeros(3)
                     
@@ -64,3 +64,62 @@ def getArea(slice_ijk):
             n[:,i,j]=n[:,i,j]/np.linalg.norm(n[:,i,j])
             A[i,j]=np.linalg.norm(crossprod1)+np.linalg.norm(crossprod2)+np.linalg.norm(crossprod3)+np.linalg.norm(crossprod4)
     return A,n
+
+def integrateForce(p,A,n):
+
+    imax=A.shape[0]
+    jmax=A.shape[1]
+    
+    F=np.zeros(3)
+    for i in range(imax):
+        for j in range(jmax):
+            
+            F+=p[i,j]*A[i,j]*n[:,i,j]
+        
+    return F
+
+def getNPR(time,ramp):
+    
+    if "T_up_start" in ramp:
+        T_up_start=ramp.get("T_up_start")
+    elif "delta_hold" in ramp:
+        T_up_start = ramp.get("delta_hold")
+    else:
+        print('Not all keys defined!')
+    
+    if "T_up_end" in ramp:
+        T_up_end=ramp.get("T_up_end")
+    elif "delta_hold" in ramp:
+        T_up_end = ramp.get("delta_hold")+ramp.get("delta_t")
+    else:
+        print('Not all keys defined!')
+        
+    if "T_konst_end" in ramp:
+        T_konst_end=ramp.get("T_konst_end")
+    elif "delta_hold" in ramp:
+        T_konst_end = 2*ramp.get("delta_hold")+ramp.get("delta_t")
+    else:
+        print('Not all keys defined!')   
+        
+    if "T_down_end" in ramp:
+        T_down_end=ramp.get("T_down_end")
+    elif "delta_hold" in ramp:
+        T_down_end = 2*ramp.get("delta_hold")+2*ramp.get("delta_t")
+    else:
+        print('Not all keys defined!')
+        
+    NPR_low=ramp.get("NPR_low")
+    NPR_high=ramp.get("NPR_high")
+        
+    if time <= T_up_start:
+        NPR = NPR_low;
+    elif (T_up_start <= time) and (T_up_end > time):
+        NPR = (NPR_low + (NPR_high - NPR_low) /(T_up_end-T_up_start)*(time-T_up_start));
+    elif (T_up_end<=time) and (T_konst_end>time):
+        NPR = NPR_high;
+    elif (T_konst_end<=time) and (T_down_end>time):
+        NPR =(NPR_high+(NPR_low-NPR_high)/(T_down_end-T_konst_end)*(time-T_konst_end));
+    elif time>=T_down_end:
+        NPR =NPR_low;
+        
+    return NPR
